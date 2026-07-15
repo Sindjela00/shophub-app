@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ShopHub.Api/ShopHub.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ShopHub.Api.IntegrationTests/ShopHub.Api.IntegrationTests.csproj" />
+    <Project Path="tests/ShopHub.Api.Tests/ShopHub.Api.Tests.csproj" />
+  </Folder>
+</Solution>

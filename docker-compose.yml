@@ -1,0 +1,3 @@
+# Local development / integration-test infrastructure placeholder.
+# TODO: add services (e.g. postgres, redis) once backend implementation starts.
+services: {}
