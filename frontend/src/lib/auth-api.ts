@@ -1,4 +1,4 @@
-import type { AuthResponse, LoginRequest, RegisterRequest } from '../types/auth'
+import type { AuthResponse, LoginRequest, RegisterRequest } from '@/types/auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 

@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { AuthLayout } from './AuthLayout'
-import { Button } from '../../components/Button'
-import { FormError } from '../../components/FormError'
-import { FormField } from '../../components/FormField'
-import { Divider } from './components/Divider'
-import { WalletConnectButton } from './components/WalletConnectButton'
-import { useAuth } from '../../context/useAuth'
-import { AuthApiError } from '../../services/authApi'
+import { AuthLayout } from '@/components/layout/auth-layout'
+import { Button } from '@/components/ui/button'
+import { FormError } from '@/components/ui/form-error'
+import { FormField } from '@/components/ui/form-field'
+import { Divider } from '@/components/ui/divider'
+import { WalletConnectButton } from '@/components/auth/wallet-connect-button'
+import { useAuth } from '@/context/auth-context'
+import { AuthApiError } from '@/lib/auth-api'
 
 interface FieldErrors {
   email?: string

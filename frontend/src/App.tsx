@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { LoginPage } from './pages/auth/LoginPage'
-import { RegisterPage } from './pages/auth/RegisterPage'
+import { LoginPage } from '@/pages/login-page'
+import { RegisterPage } from '@/pages/register-page'
 
 function App() {
   return (
