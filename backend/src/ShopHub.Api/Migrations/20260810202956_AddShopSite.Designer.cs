@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ShopHub.Api.Data;
@@ -11,9 +12,11 @@ using ShopHub.Api.Data;
 namespace ShopHub.Api.Migrations
 {
     [DbContext(typeof(ShopHubDbContext))]
-    partial class ShopHubDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260810202956_AddShopSite")]
+    partial class AddShopSite
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
