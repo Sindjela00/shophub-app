@@ -1,6 +1,26 @@
 @ShopHub.Api_HostAddress = http://localhost:5091
 
-GET {{ShopHub.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+POST {{ShopHub.Api_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "alice@example.com",
+  "password": "correct-horse-battery"
+}
+
+###
+
+POST {{ShopHub.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "alice@example.com",
+  "password": "correct-horse-battery"
+}
+
+###
+
+GET {{ShopHub.Api_HostAddress}}/api/auth/me
+Authorization: Bearer {{token}}
 
 ###

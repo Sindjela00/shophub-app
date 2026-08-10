@@ -1,3 +1,15 @@
-# Local development / integration-test infrastructure placeholder.
-# TODO: add services (e.g. postgres, redis) once backend implementation starts.
-services: {}
+# Local development infrastructure. Matches backend/src/ShopHub.Api/appsettings.Development.json.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: shophub
+      POSTGRES_USER: shophub
+      POSTGRES_PASSWORD: shophub
+    ports:
+      - "5433:5432"
+    volumes:
+      - shophub-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  shophub-postgres-data:
