@@ -1,4 +1,5 @@
 using System.Text;
+using k8s;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +51,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 builder.Services.AddAuthorization();
+
+builder.Services.Configure<KubernetesOptions>(builder.Configuration.GetSection(KubernetesOptions.SectionName));
+builder.Services.AddSingleton<IKubernetes>(sp =>
+{
+    var k8sOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<KubernetesOptions>>().Value;
+    var config = k8sOptions.InCluster
+        ? KubernetesClientConfiguration.InClusterConfig()
+        : KubernetesClientConfiguration.BuildDefaultConfig();
+    return new Kubernetes(config);
+});
+builder.Services.AddScoped<IShopProvisioningService, KubernetesShopProvisioningService>();
 
 var app = builder.Build();
 
