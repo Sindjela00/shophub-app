@@ -1,9 +1,6 @@
 # CI pipeline — triggered on every PR against develop/master, and publishes
 # a container image to GHCR on merge to master.
-# TODO (tracked in the "Testing & CI" issue):
-#   - build backend (dotnet build) and frontend (npm run build)
-#   - run unit tests (dotnet test / vitest)
-#   - run integration tests (Testcontainers)
+# TODO: build & test the frontend (npm run build / vitest) once that's in scope.
 name: CI
 on:
   pull_request:
@@ -24,6 +21,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore backend/ShopHub.slnx
+
+      - name: Build
+        run: dotnet build backend/ShopHub.slnx --no-restore --configuration Release
+
+      - name: Unit tests
+        run: dotnet test backend/tests/ShopHub.Api.Tests/ShopHub.Api.Tests.csproj --no-build --configuration Release
+
+      # Testcontainers spins up a real Postgres container per run; ubuntu-latest runners
+      # have Docker available out of the box, no extra setup needed.
+      - name: Integration tests
+        run: dotnet test backend/tests/ShopHub.Api.IntegrationTests/ShopHub.Api.IntegrationTests.csproj --no-build --configuration Release
 
   publish-image:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
