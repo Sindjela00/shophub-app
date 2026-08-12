@@ -3,6 +3,7 @@ using k8s;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ShopHub.Api.Data;
 using ShopHub.Api.Models;
@@ -28,24 +29,29 @@ builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 
-var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
-    ?? throw new InvalidOperationException("Jwt configuration section is missing.");
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// Bound via IOptions instead of reading builder.Configuration directly above: this defers the
+// read until the JWT bearer handler first needs it (first request), not at startup — so a
+// WebApplicationFactory-based test's config overrides (applied after Program's top-level code
+// runs but before the app serves requests) are picked up correctly.
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtOptions>>((bearerOptions, jwtOptions) =>
     {
+        var opts = jwtOptions.Value;
+
         // Without this, the validation pipeline silently remaps short claim types (e.g.
         // "sub", "email") to long ClaimTypes.* URIs, so a lookup by JwtRegisteredClaimNames
         // after validation finds nothing even though the token clearly has the claim.
-        options.MapInboundClaims = false;
-        options.TokenValidationParameters = new TokenValidationParameters
+        bearerOptions.MapInboundClaims = false;
+        bearerOptions.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidIssuer = jwtOptions.Issuer,
+            ValidIssuer = opts.Issuer,
             ValidateAudience = true,
-            ValidAudience = jwtOptions.Audience,
+            ValidAudience = opts.Audience,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(opts.SigningKey)),
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(30),
         };
@@ -55,7 +61,7 @@ builder.Services.AddAuthorization();
 builder.Services.Configure<KubernetesOptions>(builder.Configuration.GetSection(KubernetesOptions.SectionName));
 builder.Services.AddSingleton<IKubernetes>(sp =>
 {
-    var k8sOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<KubernetesOptions>>().Value;
+    var k8sOptions = sp.GetRequiredService<IOptions<KubernetesOptions>>().Value;
     var config = k8sOptions.InCluster
         ? KubernetesClientConfiguration.InClusterConfig()
         : KubernetesClientConfiguration.BuildDefaultConfig();
