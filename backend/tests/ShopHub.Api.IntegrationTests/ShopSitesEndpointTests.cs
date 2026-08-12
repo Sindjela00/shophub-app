@@ -1,0 +1,228 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using ShopHub.Api.Contracts;
+using Xunit;
+
+namespace ShopHub.Api.IntegrationTests;
+
+[Collection(ShopHubApiCollection.Name)]
+public class ShopSitesEndpointTests(ShopHubApiFactory factory)
+{
+    private readonly HttpClient _client = factory.CreateClient();
+
+    private static CreateShopSiteRequest NewCreateRequest(string? name = null) => new(
+        name ?? $"Shop {Guid.NewGuid():N}",
+        Availability: "standard",
+        WalletAddress: "0x1234567890abcdef1234567890abcdef12345678",
+        DatabaseKind: "standard");
+
+    private async Task<string> RegisterAndGetTokenAsync()
+    {
+        var response = await _client.PostAsJsonAsync(
+            "/api/auth/register",
+            new RegisterRequest($"user-{Guid.NewGuid():N}@example.com", "CorrectHorseBattery1"),
+            TestJson.Options);
+        response.EnsureSuccessStatusCode();
+        var auth = await response.Content.ReadFromJsonAsync<AuthResponse>(TestJson.Options);
+        return auth!.Token;
+    }
+
+    private HttpRequestMessage AuthedRequest(HttpMethod method, string url, string token, object? body = null)
+    {
+        var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body, options: TestJson.Options);
+        }
+
+        return request;
+    }
+
+    private async Task<ShopSiteDto> CreateShopSiteAsync(string token, CreateShopSiteRequest? request = null)
+    {
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Post, "/api/shop-sites", token, request ?? NewCreateRequest()));
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<ShopSiteDto>(TestJson.Options))!;
+    }
+
+    [Fact]
+    public async Task Create_with_valid_data_returns_201_and_provisions_the_custom_resources()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var request = NewCreateRequest("Aurora Shop");
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Post, "/api/shop-sites", token, request));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var site = await response.Content.ReadFromJsonAsync<ShopSiteDto>(TestJson.Options);
+        Assert.Equal("Aurora Shop", site!.Name);
+        Assert.Equal("standard", site.Availability);
+        Assert.Contains(site.Id, factory.Provisioning.Provisioned);
+    }
+
+    [Fact]
+    public async Task Create_without_a_token_returns_401()
+    {
+        var response = await _client.PostAsJsonAsync("/api/shop-sites", NewCreateRequest(), TestJson.Options);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("ultra", "standard")]
+    [InlineData("standard", "ultra")]
+    public async Task Create_with_invalid_availability_or_database_kind_returns_400(string availability, string databaseKind)
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var request = new CreateShopSiteRequest("Bad Shop", availability, "0xabc", databaseKind);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Post, "/api/shop-sites", token, request));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_does_not_persist_a_shop_site_when_provisioning_fails()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        factory.Provisioning.ThrowOnProvision = new InvalidOperationException("simulated cluster failure");
+        try
+        {
+            var response = await _client.SendAsync(AuthedRequest(HttpMethod.Post, "/api/shop-sites", token, NewCreateRequest()));
+
+            Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        }
+        finally
+        {
+            factory.Provisioning.ThrowOnProvision = null;
+        }
+
+        var listResponse = await _client.SendAsync(AuthedRequest(HttpMethod.Get, "/api/shop-sites", token));
+        var sites = await listResponse.Content.ReadFromJsonAsync<List<ShopSiteDto>>(TestJson.Options);
+        Assert.Empty(sites!);
+    }
+
+    [Fact]
+    public async Task List_only_returns_the_authenticated_users_own_sites()
+    {
+        var ownerToken = await RegisterAndGetTokenAsync();
+        var otherToken = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(ownerToken);
+
+        var ownerList = await (await _client.SendAsync(AuthedRequest(HttpMethod.Get, "/api/shop-sites", ownerToken)))
+            .Content.ReadFromJsonAsync<List<ShopSiteDto>>(TestJson.Options);
+        var otherList = await (await _client.SendAsync(AuthedRequest(HttpMethod.Get, "/api/shop-sites", otherToken)))
+            .Content.ReadFromJsonAsync<List<ShopSiteDto>>(TestJson.Options);
+
+        Assert.Contains(ownerList!, s => s.Id == created.Id);
+        Assert.DoesNotContain(otherList!, s => s.Id == created.Id);
+    }
+
+    [Fact]
+    public async Task Get_returns_404_for_another_users_site()
+    {
+        var ownerToken = await RegisterAndGetTokenAsync();
+        var otherToken = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(ownerToken);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}", otherToken));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Get_returns_404_for_an_unknown_id()
+    {
+        var token = await RegisterAndGetTokenAsync();
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{Guid.NewGuid()}", token));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_changes_availability_and_wallet_address_and_reflects_them_onto_the_crs()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+        var update = new UpdateShopSiteRequest("high", "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Put, $"/api/shop-sites/{created.Id}", token, update));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<ShopSiteDto>(TestJson.Options);
+        Assert.Equal("high", updated!.Availability);
+        Assert.Equal("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd", updated.WalletAddress);
+        Assert.Contains(created.Id, factory.Provisioning.Updated);
+    }
+
+    [Fact]
+    public async Task Update_with_invalid_availability_returns_400_and_does_not_change_the_site()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        var response = await _client.SendAsync(AuthedRequest(
+            HttpMethod.Put, $"/api/shop-sites/{created.Id}", token, new UpdateShopSiteRequest("ultra", created.WalletAddress)));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var fetched = await (await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}", token)))
+            .Content.ReadFromJsonAsync<ShopSiteDto>(TestJson.Options);
+        Assert.Equal(created.Availability, fetched!.Availability);
+    }
+
+    [Fact]
+    public async Task Update_rolls_back_the_in_memory_change_when_provisioning_update_fails()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        factory.Provisioning.ThrowOnUpdate = new InvalidOperationException("simulated cluster failure");
+        try
+        {
+            var response = await _client.SendAsync(AuthedRequest(
+                HttpMethod.Put, $"/api/shop-sites/{created.Id}", token, new UpdateShopSiteRequest("high", created.WalletAddress)));
+
+            Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        }
+        finally
+        {
+            factory.Provisioning.ThrowOnUpdate = null;
+        }
+
+        var fetched = await (await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}", token)))
+            .Content.ReadFromJsonAsync<ShopSiteDto>(TestJson.Options);
+        Assert.Equal("standard", fetched!.Availability);
+    }
+
+    [Fact]
+    public async Task Delete_removes_the_site_and_deprovisions_the_crs()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        var deleteResponse = await _client.SendAsync(AuthedRequest(HttpMethod.Delete, $"/api/shop-sites/{created.Id}", token));
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+        Assert.Contains(created.Id, factory.Provisioning.Deprovisioned);
+
+        var getResponse = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}", token));
+        Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_for_another_users_site_returns_404_and_does_not_delete_it()
+    {
+        var ownerToken = await RegisterAndGetTokenAsync();
+        var otherToken = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(ownerToken);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Delete, $"/api/shop-sites/{created.Id}", otherToken));
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+
+        var getResponse = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}", ownerToken));
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+    }
+}
