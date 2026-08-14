@@ -133,9 +133,15 @@ public class AuthEndpointTests(ShopHubApiFactory factory)
         var registerRequest = NewRegisterRequest();
         var auth = await RegisterAsync(registerRequest);
 
-        // Flip the last character of the signature segment — same header/payload, invalid signature.
+        // Flip the first character of the signature segment — same header/payload, invalid signature.
+        // Must be the first character, not the last: with a 32-byte HMAC-SHA256 signature the
+        // base64url encoding's final character carries 2 padding bits that .NET's decoder
+        // ignores, so swapping A<->B there is a no-op whenever that character is one of
+        // A/B/C/D (same top 4 bits) and the token stays validly signed. The first character
+        // always sits in a full 3-byte group with no padding bits, so tampering it is guaranteed
+        // to change the decoded signature.
         var parts = auth.Token.Split('.');
-        var tamperedSignature = parts[2][..^1] + (parts[2][^1] == 'A' ? 'B' : 'A');
+        var tamperedSignature = (parts[2][0] == 'A' ? 'B' : 'A') + parts[2][1..];
         var forgedToken = $"{parts[0]}.{parts[1]}.{tamperedSignature}";
 
         var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");

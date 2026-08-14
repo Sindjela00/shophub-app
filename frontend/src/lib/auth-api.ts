@@ -21,7 +21,7 @@ async function request<TResponse>(path: string, body: unknown): Promise<TRespons
   if (!res.ok) {
     const message = await res
       .json()
-      .then((data) => data?.message as string | undefined)
+      .then((data) => data?.error as string | undefined)
       .catch(() => undefined)
     throw new AuthApiError(message ?? `Request failed with status ${res.status}`, res.status)
   }
