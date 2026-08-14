@@ -1,9 +1,9 @@
 import { createContext, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import * as authApi from '@/lib/auth-api'
+import { clearToken, setToken } from '@/lib/token-storage'
 import type { AuthUser } from '@/types/auth'
 
-const TOKEN_KEY = 'shophub.token'
 const USER_KEY = 'shophub.user'
 
 interface AuthContextValue {
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => readStoredUser())
 
   const persistSession = (token: string, nextUser: AuthUser) => {
-    localStorage.setItem(TOKEN_KEY, token)
+    setToken(token)
     localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
     setUser(nextUser)
   }
@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         persistSession(token, registeredUser)
       },
       logout: () => {
-        localStorage.removeItem(TOKEN_KEY)
+        clearToken()
         localStorage.removeItem(USER_KEY)
         setUser(null)
       },
