@@ -4,6 +4,8 @@ public record CreateShopSiteRequest(string Name, string Availability, string Wal
 
 public record UpdateShopSiteRequest(string Availability, string WalletAddress);
 
+public record DashboardLinkDto(string Path);
+
 public record ShopSiteDto(Guid Id, string Name, string Availability, string WalletAddress, string DatabaseKind, DateTimeOffset CreatedAt)
 {
     public static ShopSiteDto FromEntity(Models.ShopSite site) =>

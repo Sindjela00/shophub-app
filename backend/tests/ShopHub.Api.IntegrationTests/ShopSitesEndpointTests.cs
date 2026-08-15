@@ -225,4 +225,47 @@ public class ShopSitesEndpointTests(ShopHubApiFactory factory)
         var getResponse = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}", ownerToken));
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
     }
+
+    [Fact]
+    public async Task GetDashboardLink_returns_the_path_the_grafana_service_builds_for_the_owner()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/dashboard-link", token));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var link = await response.Content.ReadFromJsonAsync<DashboardLinkDto>(TestJson.Options);
+        Assert.Equal($"/grafana-proxy/d/shop-{created.Id:N}?orgId=2", link!.Path);
+    }
+
+    [Fact]
+    public async Task GetDashboardLink_returns_404_for_another_users_site()
+    {
+        var ownerToken = await RegisterAndGetTokenAsync();
+        var otherToken = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(ownerToken);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/dashboard-link", otherToken));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetDashboardLink_returns_502_when_grafana_provisioning_fails()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        factory.GrafanaProvisioning.ThrowOnGetDashboardPath = new InvalidOperationException("simulated Grafana failure");
+        try
+        {
+            var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/dashboard-link", token));
+            Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        }
+        finally
+        {
+            factory.GrafanaProvisioning.ThrowOnGetDashboardPath = null;
+        }
+    }
 }

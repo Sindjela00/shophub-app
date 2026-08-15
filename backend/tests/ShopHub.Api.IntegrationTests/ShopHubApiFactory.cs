@@ -26,6 +26,7 @@ public class ShopHubApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public const string JwtAudience = "shophub-app-tests-clients";
 
     public FakeShopProvisioningService Provisioning { get; } = new();
+    public FakeGrafanaProvisioningService GrafanaProvisioning { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -47,6 +48,9 @@ public class ShopHubApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             services.RemoveAll<IShopProvisioningService>();
             services.AddSingleton<IShopProvisioningService>(Provisioning);
+
+            services.RemoveAll<IGrafanaProvisioningService>();
+            services.AddSingleton<IGrafanaProvisioningService>(GrafanaProvisioning);
         });
     }
 
