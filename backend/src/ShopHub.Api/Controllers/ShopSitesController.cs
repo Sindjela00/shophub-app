@@ -16,6 +16,7 @@ namespace ShopHub.Api.Controllers;
 public class ShopSitesController(
     ShopHubDbContext db,
     IShopProvisioningService provisioningService,
+    IGrafanaProvisioningService grafanaProvisioningService,
     ILogger<ShopSitesController> logger) : ControllerBase
 {
     private static readonly HashSet<string> ValidAvailabilities = ["standard", "high"];
@@ -72,6 +73,19 @@ public class ShopSitesController(
         db.ShopSites.Add(site);
         await db.SaveChangesAsync();
 
+        // Best-effort: the Grafana dashboard is an optional add-on, not core to the shop
+        // existing, so a Grafana-side failure here shouldn't roll back an otherwise-successful
+        // creation the way a K8s provisioning failure above does. The dashboard link just won't
+        // resolve until this is retried (e.g. next time the site is provisioned/updated).
+        try
+        {
+            await grafanaProvisioningService.ProvisionAsync(site, GetUserEmail());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to provision Grafana dashboard for shop site {Id}", site.Id);
+        }
+
         return StatusCode(StatusCodes.Status201Created, ShopSiteDto.FromEntity(site));
     }
 
@@ -97,6 +111,30 @@ public class ShopSitesController(
         }
 
         return Ok(ShopSiteDto.FromEntity(site));
+    }
+
+    // Called right before the frontend opens the dashboard in a new tab — not something a plain
+    // <a href> can point at directly, since actually viewing it requires switching the owner's
+    // Grafana account into the dedicated org first (see GetDashboardPathAsync).
+    [HttpGet("{id:guid}/dashboard-link")]
+    public async Task<ActionResult<DashboardLinkDto>> GetDashboardLink(Guid id)
+    {
+        var site = await FindOwnedSiteAsync(id);
+        if (site is null)
+        {
+            return NotFound(new ErrorResponse("Shop site not found."));
+        }
+
+        try
+        {
+            var path = await grafanaProvisioningService.GetDashboardPathAsync(site, GetUserEmail());
+            return Ok(new DashboardLinkDto(path));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to build Grafana dashboard link for shop site {Id}", site.Id);
+            return StatusCode(StatusCodes.Status502BadGateway, new ErrorResponse("The dashboard isn't available right now."));
+        }
     }
 
     [HttpPut("{id:guid}")]
@@ -166,6 +204,17 @@ public class ShopSitesController(
         db.ShopSites.Remove(site);
         await db.SaveChangesAsync();
 
+        try
+        {
+            await grafanaProvisioningService.DeprovisionAsync(site);
+        }
+        catch (Exception ex)
+        {
+            // Same best-effort reasoning as ProvisionAsync above: a leftover Grafana folder is
+            // an orphan to clean up later, not a reason to fail a delete that's otherwise done.
+            logger.LogError(ex, "Failed to deprovision Grafana dashboard for shop site {Id}", site.Id);
+        }
+
         return NoContent();
     }
 
@@ -180,4 +229,6 @@ public class ShopSitesController(
         var sub = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
         return Guid.Parse(sub!);
     }
+
+    private string GetUserEmail() => User.FindFirstValue(JwtRegisteredClaimNames.Email)!;
 }

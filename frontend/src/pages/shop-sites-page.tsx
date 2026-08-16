@@ -6,6 +6,7 @@ import { ShopSiteFormModal } from '@/components/shop-sites/shop-site-form-modal'
 import type { ShopSiteFormValues } from '@/components/shop-sites/shop-site-form-modal'
 import * as shopSitesApi from '@/lib/shop-sites-api'
 import { shopSiteUrl } from '@/lib/shop-site-url'
+import { getToken } from '@/lib/token-storage'
 import type { ShopSite } from '@/types/shop-site'
 
 const availabilityLabel: Record<ShopSite['availability'], string> = {
@@ -31,6 +32,8 @@ export function ShopSitesPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [editingSite, setEditingSite] = useState<ShopSite | 'new' | null>(null)
   const [deletingSite, setDeletingSite] = useState<ShopSite | null>(null)
+  const [dashboardError, setDashboardError] = useState<string | null>(null)
+  const [openingDashboardFor, setOpeningDashboardFor] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -75,6 +78,26 @@ export function ShopSitesPage() {
     setDeletingSite(null)
   }
 
+  const handleOpenDashboard = async (site: ShopSite) => {
+    // Opened synchronously (before the await below) so browsers don't treat it as an
+    // unrequested popup — we navigate this already-open tab once we have the real URL.
+    const tab = window.open('', '_blank')
+    setDashboardError(null)
+    setOpeningDashboardFor(site.id)
+    try {
+      const { path } = await shopSitesApi.getDashboardLink(site.id)
+      const token = getToken()
+      if (tab) {
+        tab.location.href = `${shopSitesApi.API_ORIGIN}${path}&access_token=${encodeURIComponent(token ?? '')}`
+      }
+    } catch (err) {
+      tab?.close()
+      setDashboardError(err instanceof Error ? err.message : 'Unable to open the dashboard right now.')
+    } finally {
+      setOpeningDashboardFor(null)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
@@ -92,6 +115,7 @@ export function ShopSitesPage() {
       </div>
 
       {loadError && <FormError message={loadError} />}
+      {dashboardError && <FormError message={dashboardError} />}
 
       {loading ? (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">Loading…</p>
@@ -145,6 +169,14 @@ export function ShopSitesPage() {
                       >
                         Open site
                       </a>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDashboard(site)}
+                        disabled={openingDashboardFor === site.id}
+                        className={`${rowActionClass} disabled:cursor-not-allowed disabled:opacity-60`}
+                      >
+                        {openingDashboardFor === site.id ? 'Opening…' : 'Dashboard'}
+                      </button>
                       <button
                         type="button"
                         onClick={() => setEditingSite(site)}
