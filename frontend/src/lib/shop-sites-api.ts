@@ -3,6 +3,9 @@ import type { CreateShopSiteRequest, ShopSite, UpdateShopSiteRequest } from '@/t
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 
+// The /grafana-proxy route lives on the API server's origin but outside the /api prefix.
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '')
+
 export class ShopSiteApiError extends Error {
   status: number
 
@@ -52,4 +55,8 @@ export function updateShopSite(id: string, payload: UpdateShopSiteRequest): Prom
 
 export function deleteShopSite(id: string): Promise<void> {
   return request<void>('DELETE', `/shop-sites/${id}`)
+}
+
+export function getDashboardLink(id: string): Promise<{ path: string }> {
+  return request<{ path: string }>('GET', `/shop-sites/${id}/dashboard-link`)
 }
