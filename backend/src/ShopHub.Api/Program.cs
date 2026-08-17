@@ -67,14 +67,39 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         // is the standard ASP.NET Core escape hatch (also used for SignalR's WebSocket
         // handshake, which has the same problem) for exactly that case, scoped to only the
         // proxy path so every other endpoint still requires a real Authorization header.
+        //
+        // The query param alone only gets the *first* request there: the HTML Grafana returns
+        // references its own JS/CSS/image assets with relative URLs, which the browser resolves
+        // against <base href> and requests directly — dropping the original querystring
+        // entirely. Those follow-up requests 401 with no cookie fallback (confirmed for real:
+        // Grafana's own "failed to load its application files" screen, since its client bundle
+        // never finishes loading). A short-lived, path-scoped cookie set on that first request
+        // covers them: the browser attaches it automatically to every same-path request that
+        // follows, asset loads included.
         bearerOptions.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
-                if (context.Request.Path.StartsWithSegments("/grafana-proxy") &&
-                    context.Request.Query.TryGetValue("access_token", out var token))
+                if (!context.Request.Path.StartsWithSegments("/grafana-proxy"))
+                {
+                    return Task.CompletedTask;
+                }
+
+                if (context.Request.Query.TryGetValue("access_token", out var token))
                 {
                     context.Token = token;
+                    context.Response.Cookies.Append("grafana_proxy_token", token!, new CookieOptions
+                    {
+                        Path = "/grafana-proxy",
+                        HttpOnly = true,
+                        Secure = context.Request.IsHttps,
+                        SameSite = SameSiteMode.Lax,
+                        MaxAge = TimeSpan.FromMinutes(5),
+                    });
+                }
+                else if (context.Request.Cookies.TryGetValue("grafana_proxy_token", out var cookieToken))
+                {
+                    context.Token = cookieToken;
                 }
 
                 return Task.CompletedTask;
