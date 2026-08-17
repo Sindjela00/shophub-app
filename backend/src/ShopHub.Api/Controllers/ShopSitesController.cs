@@ -17,6 +17,7 @@ public class ShopSitesController(
     ShopHubDbContext db,
     IShopProvisioningService provisioningService,
     IGrafanaProvisioningService grafanaProvisioningService,
+    IShopAdminKeyService shopAdminKeyService,
     ILogger<ShopSitesController> logger) : ControllerBase
 {
     private static readonly HashSet<string> ValidAvailabilities = ["standard", "high"];
@@ -134,6 +135,31 @@ public class ShopSitesController(
         {
             logger.LogError(ex, "Failed to build Grafana dashboard link for shop site {Id}", site.Id);
             return StatusCode(StatusCodes.Status502BadGateway, new ErrorResponse("The dashboard isn't available right now."));
+        }
+    }
+
+    // The owner pastes the returned key into shophub-shop's own admin login for this shop
+    // (catalog management, orders) — shophub-shop-operator provisions the key itself, this
+    // just reveals it. Same shape as GetDashboardLink: reads a per-shop Secret the operator
+    // owns rather than anything this API tracks itself.
+    [HttpGet("{id:guid}/admin-key")]
+    public async Task<ActionResult<AdminKeyDto>> GetAdminKey(Guid id)
+    {
+        var site = await FindOwnedSiteAsync(id);
+        if (site is null)
+        {
+            return NotFound(new ErrorResponse("Shop site not found."));
+        }
+
+        try
+        {
+            var key = await shopAdminKeyService.GetAdminKeyAsync(site);
+            return Ok(new AdminKeyDto(key));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to read the admin key for shop site {Id}", site.Id);
+            return StatusCode(StatusCodes.Status502BadGateway, new ErrorResponse("The admin key isn't available right now."));
         }
     }
 
