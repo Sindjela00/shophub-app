@@ -268,4 +268,47 @@ public class ShopSitesEndpointTests(ShopHubApiFactory factory)
             factory.GrafanaProvisioning.ThrowOnGetDashboardPath = null;
         }
     }
+
+    [Fact]
+    public async Task GetAdminKey_returns_the_key_the_operator_provisioned()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/admin-key", token));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var adminKey = await response.Content.ReadFromJsonAsync<AdminKeyDto>(TestJson.Options);
+        Assert.Equal($"fake-admin-key-shop-{created.Id:N}", adminKey!.Key);
+    }
+
+    [Fact]
+    public async Task GetAdminKey_returns_404_for_another_users_site()
+    {
+        var ownerToken = await RegisterAndGetTokenAsync();
+        var otherToken = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(ownerToken);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/admin-key", otherToken));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAdminKey_returns_502_when_the_secret_cannot_be_read()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        factory.ShopAdminKey.ThrowOnGetAdminKey = new InvalidOperationException("simulated Secret read failure");
+        try
+        {
+            var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/admin-key", token));
+            Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        }
+        finally
+        {
+            factory.ShopAdminKey.ThrowOnGetAdminKey = null;
+        }
+    }
 }

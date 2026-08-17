@@ -27,6 +27,7 @@ public class ShopHubApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public FakeShopProvisioningService Provisioning { get; } = new();
     public FakeGrafanaProvisioningService GrafanaProvisioning { get; } = new();
+    public FakeShopAdminKeyService ShopAdminKey { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -51,6 +52,9 @@ public class ShopHubApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
             services.RemoveAll<IGrafanaProvisioningService>();
             services.AddSingleton<IGrafanaProvisioningService>(GrafanaProvisioning);
+
+            services.RemoveAll<IShopAdminKeyService>();
+            services.AddSingleton<IShopAdminKeyService>(ShopAdminKey);
         });
     }
 

@@ -93,6 +93,7 @@ builder.Services.AddSingleton<IKubernetes>(sp =>
     return new Kubernetes(config);
 });
 builder.Services.AddScoped<IShopProvisioningService, KubernetesShopProvisioningService>();
+builder.Services.AddScoped<IShopAdminKeyService, ShopAdminKeyService>();
 
 builder.Services.Configure<GrafanaOptions>(builder.Configuration.GetSection(GrafanaOptions.SectionName));
 builder.Services.AddHttpClient<IGrafanaProvisioningService, GrafanaProvisioningService>((sp, client) =>
