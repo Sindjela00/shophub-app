@@ -156,8 +156,15 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.UseCors(DevCorsPolicy);
+}
 
-    using var scope = app.Services.CreateScope();
+// No separate migration step exists anywhere in the deployment pipeline yet (the chart just
+// creates the Deployment, nothing runs `dotnet ef database update` out-of-band), so gating this
+// to Development left every real install with no schema at all. Runs unconditionally rather
+// than only in Development; EF Core's migration lock (see Database.MigrateAsync's own
+// "acquiring an exclusive lock" behavior) makes this safe if multiple replicas start at once.
+using (var scope = app.Services.CreateScope())
+{
     await scope.ServiceProvider.GetRequiredService<ShopHubDbContext>().Database.MigrateAsync();
 }
 
