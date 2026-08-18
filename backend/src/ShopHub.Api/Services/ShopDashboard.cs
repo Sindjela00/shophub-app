@@ -11,7 +11,11 @@ using ShopHub.Api.Models;
 /// </summary>
 public static class ShopDashboard
 {
-    private static readonly object Datasource = new { type = "prometheus", uid = "Prometheus" };
+    // Must match the uid kube-prometheus-stack's own datasource provisioning gives its
+    // Prometheus datasource (lowercase) — confirmed against the real provisioned datasource,
+    // not assumed; the capitalized "Prometheus" this used to be caused a real
+    // "Datasource Prometheus not found" error in every panel.
+    private static readonly object Datasource = new { type = "prometheus", uid = "prometheus" };
 
     public static object Build(ShopSite site)
     {
