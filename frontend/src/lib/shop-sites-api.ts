@@ -60,3 +60,7 @@ export function deleteShopSite(id: string): Promise<void> {
 export function getDashboardLink(id: string): Promise<{ path: string }> {
   return request<{ path: string }>('GET', `/shop-sites/${id}/dashboard-link`)
 }
+
+export function getSiteUrl(id: string): Promise<{ url: string }> {
+  return request<{ url: string }>('GET', `/shop-sites/${id}/site-url`)
+}

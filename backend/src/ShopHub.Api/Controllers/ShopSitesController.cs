@@ -18,6 +18,7 @@ public class ShopSitesController(
     IShopProvisioningService provisioningService,
     IGrafanaProvisioningService grafanaProvisioningService,
     IShopAdminKeyService shopAdminKeyService,
+    IShopSiteUrlService shopSiteUrlService,
     ILogger<ShopSitesController> logger) : ControllerBase
 {
     private static readonly HashSet<string> ValidAvailabilities = ["standard", "high"];
@@ -160,6 +161,29 @@ public class ShopSitesController(
         {
             logger.LogError(ex, "Failed to read the admin key for shop site {Id}", site.Id);
             return StatusCode(StatusCodes.Status502BadGateway, new ErrorResponse("The admin key isn't available right now."));
+        }
+    }
+
+    // The "Open site" link's actual destination — a shop's NodePort Service, read live rather
+    // than derived client-side (the allocated port isn't knowable without asking the cluster).
+    [HttpGet("{id:guid}/site-url")]
+    public async Task<ActionResult<SiteUrlDto>> GetSiteUrl(Guid id)
+    {
+        var site = await FindOwnedSiteAsync(id);
+        if (site is null)
+        {
+            return NotFound(new ErrorResponse("Shop site not found."));
+        }
+
+        try
+        {
+            var url = await shopSiteUrlService.GetSiteUrlAsync(site);
+            return Ok(new SiteUrlDto(url));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to resolve the site URL for shop site {Id}", site.Id);
+            return StatusCode(StatusCodes.Status502BadGateway, new ErrorResponse("The site isn't available right now."));
         }
     }
 

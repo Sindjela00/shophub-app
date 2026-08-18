@@ -5,7 +5,6 @@ import { DeleteShopSiteDialog } from '@/components/shop-sites/delete-shop-site-d
 import { ShopSiteFormModal } from '@/components/shop-sites/shop-site-form-modal'
 import type { ShopSiteFormValues } from '@/components/shop-sites/shop-site-form-modal'
 import * as shopSitesApi from '@/lib/shop-sites-api'
-import { shopSiteUrl } from '@/lib/shop-site-url'
 import { getToken } from '@/lib/token-storage'
 import type { ShopSite } from '@/types/shop-site'
 
@@ -34,6 +33,8 @@ export function ShopSitesPage() {
   const [deletingSite, setDeletingSite] = useState<ShopSite | null>(null)
   const [dashboardError, setDashboardError] = useState<string | null>(null)
   const [openingDashboardFor, setOpeningDashboardFor] = useState<string | null>(null)
+  const [siteError, setSiteError] = useState<string | null>(null)
+  const [openingSiteFor, setOpeningSiteFor] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -98,6 +99,26 @@ export function ShopSitesPage() {
     }
   }
 
+  const handleOpenSite = async (site: ShopSite) => {
+    // Same synchronous-open-then-navigate pattern as the dashboard button above. No
+    // access_token needed here — the storefront is public, customers browsing/buying from it
+    // have no ShopHub account at all.
+    const tab = window.open('', '_blank')
+    setSiteError(null)
+    setOpeningSiteFor(site.id)
+    try {
+      const { url } = await shopSitesApi.getSiteUrl(site.id)
+      if (tab) {
+        tab.location.href = url
+      }
+    } catch (err) {
+      tab?.close()
+      setSiteError(err instanceof Error ? err.message : 'Unable to open the site right now.')
+    } finally {
+      setOpeningSiteFor(null)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
@@ -116,6 +137,7 @@ export function ShopSitesPage() {
 
       {loadError && <FormError message={loadError} />}
       {dashboardError && <FormError message={dashboardError} />}
+      {siteError && <FormError message={siteError} />}
 
       {loading ? (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">Loading…</p>
@@ -161,14 +183,14 @@ export function ShopSitesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
-                      <a
-                        href={shopSiteUrl(site.id)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={rowActionClass}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSite(site)}
+                        disabled={openingSiteFor === site.id}
+                        className={`${rowActionClass} disabled:cursor-not-allowed disabled:opacity-60`}
                       >
-                        Open site
-                      </a>
+                        {openingSiteFor === site.id ? 'Opening…' : 'Open site'}
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleOpenDashboard(site)}
