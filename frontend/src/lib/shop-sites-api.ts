@@ -15,7 +15,11 @@ export class ShopSiteApiError extends Error {
   }
 }
 
-async function request<TResponse>(method: string, path: string, body?: unknown): Promise<TResponse> {
+async function request<TResponse>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<TResponse> {
   const token = getToken()
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
@@ -63,4 +67,8 @@ export function getDashboardLink(id: string): Promise<{ path: string }> {
 
 export function getSiteUrl(id: string): Promise<{ url: string }> {
   return request<{ url: string }>('GET', `/shop-sites/${id}/site-url`)
+}
+
+export function getAdminKey(id: string): Promise<{ key: string }> {
+  return request<{ key: string }>('GET', `/shop-sites/${id}/admin-key`)
 }

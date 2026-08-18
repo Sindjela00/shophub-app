@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/ui/form-error'
 import { DeleteShopSiteDialog } from '@/components/shop-sites/delete-shop-site-dialog'
+import { RevealAdminKeyDialog } from '@/components/shop-sites/reveal-admin-key-dialog'
 import { ShopSiteFormModal } from '@/components/shop-sites/shop-site-form-modal'
 import type { ShopSiteFormValues } from '@/components/shop-sites/shop-site-form-modal'
 import * as shopSitesApi from '@/lib/shop-sites-api'
@@ -35,6 +36,7 @@ export function ShopSitesPage() {
   const [openingDashboardFor, setOpeningDashboardFor] = useState<string | null>(null)
   const [siteError, setSiteError] = useState<string | null>(null)
   const [openingSiteFor, setOpeningSiteFor] = useState<string | null>(null)
+  const [revealingSite, setRevealingSite] = useState<ShopSite | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -47,7 +49,9 @@ export function ShopSitesPage() {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setLoadError(err instanceof Error ? err.message : 'Unable to load your shop sites right now.')
+          setLoadError(
+            err instanceof Error ? err.message : 'Unable to load your shop sites right now.',
+          )
         }
       })
       .finally(() => {
@@ -93,7 +97,9 @@ export function ShopSitesPage() {
       }
     } catch (err) {
       tab?.close()
-      setDashboardError(err instanceof Error ? err.message : 'Unable to open the dashboard right now.')
+      setDashboardError(
+        err instanceof Error ? err.message : 'Unable to open the dashboard right now.',
+      )
     } finally {
       setOpeningDashboardFor(null)
     }
@@ -201,6 +207,13 @@ export function ShopSitesPage() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => setRevealingSite(site)}
+                        className={rowActionClass}
+                      >
+                        Admin key
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setEditingSite(site)}
                         className={rowActionClass}
                       >
@@ -236,6 +249,10 @@ export function ShopSitesPage() {
           onClose={() => setDeletingSite(null)}
           onConfirm={handleDelete}
         />
+      )}
+
+      {revealingSite && (
+        <RevealAdminKeyDialog site={revealingSite} onClose={() => setRevealingSite(null)} />
       )}
     </div>
   )
