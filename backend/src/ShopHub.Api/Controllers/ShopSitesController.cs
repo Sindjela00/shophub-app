@@ -19,6 +19,7 @@ public class ShopSitesController(
     IGrafanaProvisioningService grafanaProvisioningService,
     IShopAdminKeyService shopAdminKeyService,
     IShopSiteUrlService shopSiteUrlService,
+    IShopDiscordService shopDiscordService,
     ILogger<ShopSitesController> logger) : ControllerBase
 {
     private static readonly HashSet<string> ValidAvailabilities = ["standard", "high"];
@@ -184,6 +185,75 @@ public class ShopSitesController(
         {
             logger.LogError(ex, "Failed to resolve the site URL for shop site {Id}", site.Id);
             return StatusCode(StatusCodes.Status502BadGateway, new ErrorResponse("The site isn't available right now."));
+        }
+    }
+
+    // The invite link + Guild ID field the frontend's onboarding modal renders next to a shop's
+    // row — static (doesn't depend on the site at all), but routed per-site for consistency and
+    // so it's covered by the same [Authorize] + ownership shape as everything else here.
+    [HttpGet("{id:guid}/discord/invite-url")]
+    public async Task<ActionResult<DiscordInviteDto>> GetDiscordInviteUrl(Guid id)
+    {
+        var site = await FindOwnedSiteAsync(id);
+        if (site is null)
+        {
+            return NotFound(new ErrorResponse("Shop site not found."));
+        }
+
+        return Ok(new DiscordInviteDto(shopDiscordService.BuildInviteUrl()));
+    }
+
+    [HttpGet("{id:guid}/discord/status")]
+    public async Task<ActionResult<DiscordStatusDto>> GetDiscordStatus(Guid id)
+    {
+        var site = await FindOwnedSiteAsync(id);
+        if (site is null)
+        {
+            return NotFound(new ErrorResponse("Shop site not found."));
+        }
+
+        try
+        {
+            var status = await shopDiscordService.GetStatusAsync(site);
+            return Ok(DiscordStatusDto.FromStatus(status));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to read Discord attach status for shop site {Id}", site.Id);
+            return StatusCode(StatusCodes.Status502BadGateway, new ErrorResponse("Discord status isn't available right now."));
+        }
+    }
+
+    [HttpPost("{id:guid}/discord/attach")]
+    public async Task<ActionResult<DiscordStatusDto>> AttachDiscord(Guid id, AttachDiscordRequest request)
+    {
+        var site = await FindOwnedSiteAsync(id);
+        if (site is null)
+        {
+            return NotFound(new ErrorResponse("Shop site not found."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.GuildId))
+        {
+            return BadRequest(new ErrorResponse("GuildId is required."));
+        }
+
+        try
+        {
+            var isMember = await shopDiscordService.VerifyGuildMembershipAsync(request.GuildId);
+            if (!isMember)
+            {
+                return BadRequest(new ErrorResponse("The bot hasn't joined that server yet — invite it first, then try again."));
+            }
+
+            await shopDiscordService.AttachAsync(site, request.GuildId);
+            var status = await shopDiscordService.GetStatusAsync(site);
+            return Ok(DiscordStatusDto.FromStatus(status));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to attach Discord for shop site {Id}", site.Id);
+            return StatusCode(StatusCodes.Status502BadGateway, new ErrorResponse("Couldn't attach Discord right now."));
         }
     }
 

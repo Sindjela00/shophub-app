@@ -13,10 +13,12 @@ public class FakeGrafanaProvisioningService : IGrafanaProvisioningService
 {
     public List<(Guid SiteId, string OwnerEmail)> Provisioned { get; } = [];
     public List<Guid> Deprovisioned { get; } = [];
+    public List<string> PlatformDashboardRequestedFor { get; } = [];
 
     public Exception? ThrowOnProvision { get; set; }
     public Exception? ThrowOnGetDashboardPath { get; set; }
     public Exception? ThrowOnDeprovision { get; set; }
+    public Exception? ThrowOnGetPlatformDashboardPath { get; set; }
 
     public Task ProvisionAsync(ShopSite site, string ownerEmail, CancellationToken cancellationToken = default)
     {
@@ -48,5 +50,16 @@ public class FakeGrafanaProvisioningService : IGrafanaProvisioningService
 
         Deprovisioned.Add(site.Id);
         return Task.CompletedTask;
+    }
+
+    public Task<string> GetPlatformDashboardPathAsync(string ownerEmail, CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnGetPlatformDashboardPath is { } ex)
+        {
+            throw ex;
+        }
+
+        PlatformDashboardRequestedFor.Add(ownerEmail);
+        return Task.FromResult("/grafana-proxy/d/shophub-platform?orgId=2");
     }
 }

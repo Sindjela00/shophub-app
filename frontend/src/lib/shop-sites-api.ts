@@ -1,5 +1,5 @@
 import { getToken } from '@/lib/token-storage'
-import type { CreateShopSiteRequest, ShopSite, UpdateShopSiteRequest } from '@/types/shop-site'
+import type { CreateShopSiteRequest, DiscordStatus, ShopSite, UpdateShopSiteRequest } from '@/types/shop-site'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 
@@ -15,7 +15,9 @@ export class ShopSiteApiError extends Error {
   }
 }
 
-async function request<TResponse>(method: string, path: string, body?: unknown): Promise<TResponse> {
+// Exported for platform-api.ts — the platform dashboard link isn't shop-site-scoped, but the
+// request/auth/error-handling plumbing is identical.
+export async function request<TResponse>(method: string, path: string, body?: unknown): Promise<TResponse> {
   const token = getToken()
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
@@ -63,4 +65,16 @@ export function getDashboardLink(id: string): Promise<{ path: string }> {
 
 export function getSiteUrl(id: string): Promise<{ url: string }> {
   return request<{ url: string }>('GET', `/shop-sites/${id}/site-url`)
+}
+
+export function getDiscordInviteUrl(id: string): Promise<{ inviteUrl: string }> {
+  return request<{ inviteUrl: string }>('GET', `/shop-sites/${id}/discord/invite-url`)
+}
+
+export function getDiscordStatus(id: string): Promise<DiscordStatus> {
+  return request<DiscordStatus>('GET', `/shop-sites/${id}/discord/status`)
+}
+
+export function attachDiscord(id: string, guildId: string): Promise<DiscordStatus> {
+  return request<DiscordStatus>('POST', `/shop-sites/${id}/discord/attach`, { guildId })
 }

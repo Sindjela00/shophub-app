@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { FormError } from '@/components/ui/form-error'
 import { DeleteShopSiteDialog } from '@/components/shop-sites/delete-shop-site-dialog'
+import { DiscordOnboardingModal } from '@/components/shop-sites/discord-onboarding-modal'
 import { ShopSiteFormModal } from '@/components/shop-sites/shop-site-form-modal'
 import type { ShopSiteFormValues } from '@/components/shop-sites/shop-site-form-modal'
 import * as shopSitesApi from '@/lib/shop-sites-api'
@@ -35,6 +36,7 @@ export function ShopSitesPage() {
   const [openingDashboardFor, setOpeningDashboardFor] = useState<string | null>(null)
   const [siteError, setSiteError] = useState<string | null>(null)
   const [openingSiteFor, setOpeningSiteFor] = useState<string | null>(null)
+  const [discordSiteFor, setDiscordSiteFor] = useState<ShopSite | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -199,6 +201,9 @@ export function ShopSitesPage() {
                       >
                         {openingDashboardFor === site.id ? 'Opening…' : 'Dashboard'}
                       </button>
+                      <button type="button" onClick={() => setDiscordSiteFor(site)} className={rowActionClass}>
+                        Discord
+                      </button>
                       <button
                         type="button"
                         onClick={() => setEditingSite(site)}
@@ -236,6 +241,10 @@ export function ShopSitesPage() {
           onClose={() => setDeletingSite(null)}
           onConfirm={handleDelete}
         />
+      )}
+
+      {discordSiteFor && (
+        <DiscordOnboardingModal site={discordSiteFor} onClose={() => setDiscordSiteFor(null)} />
       )}
     </div>
   )

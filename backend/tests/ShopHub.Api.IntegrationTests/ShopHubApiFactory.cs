@@ -29,6 +29,7 @@ public class ShopHubApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public FakeGrafanaProvisioningService GrafanaProvisioning { get; } = new();
     public FakeShopAdminKeyService ShopAdminKey { get; } = new();
     public FakeShopSiteUrlService ShopSiteUrl { get; } = new();
+    public FakeShopDiscordService ShopDiscord { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -59,6 +60,9 @@ public class ShopHubApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
             services.RemoveAll<IShopSiteUrlService>();
             services.AddSingleton<IShopSiteUrlService>(ShopSiteUrl);
+
+            services.RemoveAll<IShopDiscordService>();
+            services.AddSingleton<IShopDiscordService>(ShopDiscord);
         });
     }
 
