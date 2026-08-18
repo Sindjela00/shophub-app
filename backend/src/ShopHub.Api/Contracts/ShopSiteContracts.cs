@@ -8,6 +8,8 @@ public record DashboardLinkDto(string Path);
 
 public record AdminKeyDto(string Key);
 
+public record SiteUrlDto(string Url);
+
 public record ShopSiteDto(Guid Id, string Name, string Availability, string WalletAddress, string DatabaseKind, DateTimeOffset CreatedAt)
 {
     public static ShopSiteDto FromEntity(Models.ShopSite site) =>
