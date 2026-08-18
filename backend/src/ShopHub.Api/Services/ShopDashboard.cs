@@ -45,7 +45,11 @@ public static class ShopDashboard
                         new
                         {
                             datasource = Datasource,
-                            expr = $"sum(rate(container_cpu_usage_seconds_total{{namespace=\"shops\", container!=\"\", container!=\"POD\"}}[5m]) * on(namespace,pod) group_left() kube_pod_labels{{namespace=\"shops\", label_app_kubernetes_io_instance=\"{shop}\"}})",
+                            // No container!="" filter — this cluster's cAdvisor only exposes a
+                            // single pod-level "total" series with no container label at all,
+                            // so that filter silently matched nothing (see shophub-kube-state's
+                            // dashboard for the same fix, found and verified there first).
+                            expr = $"sum(rate(container_cpu_usage_seconds_total{{namespace=\"shops\"}}[5m]) * on(namespace,pod) group_left() kube_pod_labels{{namespace=\"shops\", label_app_kubernetes_io_instance=\"{shop}\"}})",
                             legendFormat = "cores",
                         },
                     },
@@ -62,7 +66,7 @@ public static class ShopDashboard
                         new
                         {
                             datasource = Datasource,
-                            expr = $"sum(container_memory_working_set_bytes{{namespace=\"shops\", container!=\"\", container!=\"POD\"}} * on(namespace,pod) group_left() kube_pod_labels{{namespace=\"shops\", label_app_kubernetes_io_instance=\"{shop}\"}})",
+                            expr = $"sum(container_memory_working_set_bytes{{namespace=\"shops\"}} * on(namespace,pod) group_left() kube_pod_labels{{namespace=\"shops\", label_app_kubernetes_io_instance=\"{shop}\"}})",
                             legendFormat = "working set",
                         },
                     },
@@ -71,16 +75,24 @@ public static class ShopDashboard
                 {
                     id = 3,
                     type = "timeseries",
-                    title = "Filesystem Usage",
+                    title = "Disk I/O",
                     gridPos = new { x = 12, y = 0, w = 6, h = 8 },
-                    fieldConfig = new { defaults = new { unit = "bytes" }, overrides = Array.Empty<object>() },
+                    fieldConfig = new { defaults = new { unit = "Bps" }, overrides = Array.Empty<object>() },
                     targets = new[]
                     {
                         new
                         {
                             datasource = Datasource,
-                            expr = $"sum(container_fs_usage_bytes{{namespace=\"shops\", container!=\"\", container!=\"POD\"}} * on(namespace,pod) group_left() kube_pod_labels{{namespace=\"shops\", label_app_kubernetes_io_instance=\"{shop}\"}})",
-                            legendFormat = "used",
+                            // container_fs_usage_bytes doesn't exist on this cluster's cAdvisor
+                            // at all — only per-op read/write byte counters do.
+                            expr = $"sum(rate(container_fs_reads_bytes_total{{namespace=\"shops\"}}[5m]) * on(namespace,pod) group_left() kube_pod_labels{{namespace=\"shops\", label_app_kubernetes_io_instance=\"{shop}\"}})",
+                            legendFormat = "read",
+                        },
+                        new
+                        {
+                            datasource = Datasource,
+                            expr = $"sum(rate(container_fs_writes_bytes_total{{namespace=\"shops\"}}[5m]) * on(namespace,pod) group_left() kube_pod_labels{{namespace=\"shops\", label_app_kubernetes_io_instance=\"{shop}\"}})",
+                            legendFormat = "write",
                         },
                     },
                 },
@@ -119,7 +131,10 @@ public static class ShopDashboard
                         new
                         {
                             datasource = Datasource,
-                            expr = $"sum(increase(http_server_request_duration_seconds_count{{namespace=\"shops\", service=\"{shop}\"}}[24h]))",
+                            // Dotted, quoted-selector syntax — this Prometheus's UTF-8
+                            // metric-name support preserves the OTel exporter's literally-dotted
+                            // instrument names instead of normalizing them to underscores.
+                            expr = $"sum(increase({{\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"{shop}\"}}[24h]))",
                         },
                     },
                 },
@@ -135,7 +150,7 @@ public static class ShopDashboard
                         new
                         {
                             datasource = Datasource,
-                            expr = $"sum(increase(http_server_request_duration_seconds_count{{namespace=\"shops\", service=\"{shop}\", http_response_status_code=~\"2..\"}}[24h]))",
+                            expr = $"sum(increase({{\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"{shop}\", \"http.response.status_code\"=~\"2..\"}}[24h]))",
                         },
                     },
                 },
@@ -151,7 +166,7 @@ public static class ShopDashboard
                         new
                         {
                             datasource = Datasource,
-                            expr = $"sum(increase(http_server_request_duration_seconds_count{{namespace=\"shops\", service=\"{shop}\", http_response_status_code=~\"4..|5..\"}}[24h]))",
+                            expr = $"sum(increase({{\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"{shop}\", \"http.response.status_code\"=~\"4..|5..\"}}[24h]))",
                         },
                     },
                 },
@@ -167,7 +182,7 @@ public static class ShopDashboard
                         new
                         {
                             datasource = Datasource,
-                            expr = $"max(http_traffic_unique_visitors_today{{namespace=\"shops\", service=\"{shop}\"}})",
+                            expr = $"max({{\"http.traffic.unique_visitors_today\", namespace=\"shops\", service=\"{shop}\"}})",
                         },
                     },
                 },
@@ -183,7 +198,7 @@ public static class ShopDashboard
                         new
                         {
                             datasource = Datasource,
-                            expr = $"sum(increase(http_traffic_request_bytes_total{{namespace=\"shops\", service=\"{shop}\"}}[24h]) + increase(http_traffic_response_bytes_total{{namespace=\"shops\", service=\"{shop}\"}}[24h])) / 1e9",
+                            expr = $"sum(increase({{\"http.traffic.request_bytes_total\", namespace=\"shops\", service=\"{shop}\"}}[24h]) + increase({{\"http.traffic.response_bytes_total\", namespace=\"shops\", service=\"{shop}\"}}[24h])) / 1e9",
                         },
                     },
                 },
@@ -199,7 +214,7 @@ public static class ShopDashboard
                         new
                         {
                             datasource = Datasource,
-                            expr = $"sum by (http_route) (increase(http_server_request_duration_seconds_count{{namespace=\"shops\", service=\"{shop}\", http_response_status_code=\"404\"}}[24h]))",
+                            expr = $"sum by (\"http.route\") (increase({{\"http.server.request.duration_seconds_count\", namespace=\"shops\", service=\"{shop}\", \"http.response.status_code\"=\"404\"}}[24h]))",
                             format = "table",
                             instant = true,
                         },
