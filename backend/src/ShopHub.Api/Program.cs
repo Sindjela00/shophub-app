@@ -229,15 +229,8 @@ async Task ProxyToShopAsync(
     // Deployment/Service after (shop_controller.go) — same value ShopHub already uses to talk
     // to the Shop/Wallet/DiscordChannel CRs themselves.
     var destinationPrefix = $"http://{site.K8sName}.{kubernetesOptions.Value.Namespace}.svc.cluster.local";
-    await forwarder.SendAsync(context, destinationPrefix, shopProxyHttpClient, (ctx, request) =>
-    {
-        // The default transform mirrors this whole request's incoming path, including this
-        // route's own "/shop-proxy/{id}" prefix — Map-with-a-route-template doesn't strip a
-        // matched prefix from HttpContext.Request.Path the way classic path-branching Map does,
-        // and the real Shop app obviously has no route registered for that prefix.
-        request.RequestUri = new Uri($"{destinationPrefix}/{catchAll}{ctx.Request.QueryString}");
-        return ValueTask.CompletedTask;
-    });
+    await forwarder.SendAsync(
+        context, destinationPrefix, shopProxyHttpClient, ForwarderRequestConfig.Empty, new ShopProxyTransformer(id, catchAll ?? ""));
 }
 
 // Two routes, not one: {**catchAll} alone doesn't match a bare "/shop-proxy/{id}" or
@@ -250,5 +243,44 @@ app.Map("/shop-proxy/{id:guid}/{**catchAll}", (HttpContext context, Guid id, str
     ProxyToShopAsync(context, id, catchAll, db, forwarder, kubernetesOptions));
 
 app.Run();
+
+// The bundled Shop frontend (see shophub-shop's backend/Dockerfile) has no origin of its own —
+// it's reached at a different "/shop-proxy/{id}" prefix per shop, which isn't known until this
+// request arrives, so it can't be baked into the app's build. Its built HTML/asset references are
+// relative rather than absolute-from-root for exactly this reason (see shophub-shop's
+// vite.config.ts), which means the browser needs a <base> tag declaring that prefix to resolve
+// them correctly — otherwise every asset/API request the loaded page makes resolves against
+// ShopHub's own origin root instead of through this proxy, and the page loads blank. Grafana gets
+// the equivalent of this from its own serve_from_sub_path support (see /grafana-proxy); the Shop
+// app has no such built-in awareness, so this proxy adds it by rewriting the response instead.
+sealed class ShopProxyTransformer(Guid id, string catchAll) : HttpTransformer
+{
+    public override async ValueTask TransformRequestAsync(
+        HttpContext httpContext, HttpRequestMessage proxyRequest, string destinationPrefix, CancellationToken cancellationToken)
+    {
+        await base.TransformRequestAsync(httpContext, proxyRequest, destinationPrefix, cancellationToken);
+
+        // The default transform mirrors this whole request's incoming path, including this
+        // route's own "/shop-proxy/{id}" prefix — Map-with-a-route-template doesn't strip a
+        // matched prefix from HttpContext.Request.Path the way classic path-branching Map does,
+        // and the real Shop app obviously has no route registered for that prefix.
+        proxyRequest.RequestUri = new Uri($"{destinationPrefix}/{catchAll}{httpContext.Request.QueryString}");
+    }
+
+    public override async ValueTask<bool> TransformResponseAsync(
+        HttpContext httpContext, HttpResponseMessage? proxyResponse, CancellationToken cancellationToken)
+    {
+        if (proxyResponse is not null && proxyResponse.Content.Headers.ContentType?.MediaType == "text/html")
+        {
+            var html = await proxyResponse.Content.ReadAsStringAsync(cancellationToken);
+            var withBase = html.Replace("<head>", $"<head><base href=\"/shop-proxy/{id}/\">");
+            var rewritten = new ByteArrayContent(Encoding.UTF8.GetBytes(withBase));
+            rewritten.Headers.ContentType = proxyResponse.Content.Headers.ContentType;
+            proxyResponse.Content = rewritten;
+        }
+
+        return await base.TransformResponseAsync(httpContext, proxyResponse, cancellationToken);
+    }
+}
 
 public partial class Program;
