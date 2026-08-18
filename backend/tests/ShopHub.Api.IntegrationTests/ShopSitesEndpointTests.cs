@@ -311,4 +311,47 @@ public class ShopSitesEndpointTests(ShopHubApiFactory factory)
             factory.ShopAdminKey.ThrowOnGetAdminKey = null;
         }
     }
+
+    [Fact]
+    public async Task GetSiteUrl_returns_the_url_the_service_reports()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/site-url", token));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var siteUrl = await response.Content.ReadFromJsonAsync<SiteUrlDto>(TestJson.Options);
+        Assert.Equal($"http://fake-host:30000/shop-{created.Id:N}", siteUrl!.Url);
+    }
+
+    [Fact]
+    public async Task GetSiteUrl_returns_404_for_another_users_site()
+    {
+        var ownerToken = await RegisterAndGetTokenAsync();
+        var otherToken = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(ownerToken);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/site-url", otherToken));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetSiteUrl_returns_502_when_the_service_cannot_be_read()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        factory.ShopSiteUrl.ThrowOnGetSiteUrl = new InvalidOperationException("simulated Service read failure");
+        try
+        {
+            var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/site-url", token));
+            Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        }
+        finally
+        {
+            factory.ShopSiteUrl.ThrowOnGetSiteUrl = null;
+        }
+    }
 }
