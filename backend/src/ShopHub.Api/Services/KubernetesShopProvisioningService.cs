@@ -40,12 +40,9 @@ public class KubernetesShopProvisioningService(
             }, cancellationToken);
             created.Add("wallets");
 
-            await CreateAsync("discordchannels", "DiscordChannel", name, new
-            {
-                shopRef = name,
-                channelName = name,
-            }, cancellationToken);
-            created.Add("discordchannels");
+            // DiscordChannel is no longer created eagerly here — it needs a guildId the owner
+            // hasn't chosen yet at this point (see IShopDiscordService.AttachAsync, called once
+            // they've invited the bot to their own server and verified it joined).
         }
         catch
         {

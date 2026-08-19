@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using ShopHub.Api.Contracts;
+using ShopHub.Api.Services;
 using Xunit;
 
 namespace ShopHub.Api.IntegrationTests;
@@ -353,5 +354,115 @@ public class ShopSitesEndpointTests(ShopHubApiFactory factory)
         {
             factory.ShopSiteUrl.ThrowOnGetSiteUrl = null;
         }
+    }
+
+    [Fact]
+    public async Task GetDiscordInviteUrl_returns_the_url_the_service_builds()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/discord/invite-url", token));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var invite = await response.Content.ReadFromJsonAsync<DiscordInviteDto>(TestJson.Options);
+        Assert.Equal("https://discord.com/oauth2/authorize?client_id=fake&scope=bot", invite!.InviteUrl);
+    }
+
+    [Fact]
+    public async Task GetDiscordInviteUrl_returns_404_for_another_users_site()
+    {
+        var ownerToken = await RegisterAndGetTokenAsync();
+        var otherToken = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(ownerToken);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/discord/invite-url", otherToken));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetDiscordStatus_returns_the_status_the_service_reports()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+        factory.ShopDiscord.StatusResult = new DiscordStatus(Attached: true, GuildId: "123", Ready: true, Message: "ok");
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/discord/status", token));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var status = await response.Content.ReadFromJsonAsync<DiscordStatusDto>(TestJson.Options);
+        Assert.True(status!.Attached);
+        Assert.Equal("123", status.GuildId);
+        Assert.True(status.Ready);
+    }
+
+    [Fact]
+    public async Task GetDiscordStatus_returns_404_for_another_users_site()
+    {
+        var ownerToken = await RegisterAndGetTokenAsync();
+        var otherToken = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(ownerToken);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/discord/status", otherToken));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetDiscordStatus_returns_502_when_the_cr_cannot_be_read()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        factory.ShopDiscord.ThrowOnGetStatus = new InvalidOperationException("simulated CR read failure");
+        try
+        {
+            var response = await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}/discord/status", token));
+            Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        }
+        finally
+        {
+            factory.ShopDiscord.ThrowOnGetStatus = null;
+        }
+    }
+
+    [Fact]
+    public async Task AttachDiscord_attaches_once_the_bot_is_verified_as_a_guild_member()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+        factory.ShopDiscord.VerifyResult = true;
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Post, $"/api/shop-sites/{created.Id}/discord/attach", token, new AttachDiscordRequest("999")));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(created.Id, factory.ShopDiscord.AttachRequested);
+        Assert.Contains("999", factory.ShopDiscord.GuildIdsVerified);
+    }
+
+    [Fact]
+    public async Task AttachDiscord_returns_400_and_does_not_attach_when_the_bot_has_not_joined_the_guild()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+        factory.ShopDiscord.VerifyResult = false;
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Post, $"/api/shop-sites/{created.Id}/discord/attach", token, new AttachDiscordRequest("999")));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.DoesNotContain(created.Id, factory.ShopDiscord.AttachRequested);
+    }
+
+    [Fact]
+    public async Task AttachDiscord_returns_404_for_another_users_site()
+    {
+        var ownerToken = await RegisterAndGetTokenAsync();
+        var otherToken = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(ownerToken);
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Post, $"/api/shop-sites/{created.Id}/discord/attach", otherToken, new AttachDiscordRequest("999")));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

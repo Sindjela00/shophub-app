@@ -16,6 +16,11 @@ public class GrafanaProvisioningService(
 {
     private GrafanaOptions Options => options.Value;
 
+    // Same value used for both the folder uid and the dashboard uid, same convention as
+    // ShopDashboard's per-shop folders — there's only ever one platform dashboard, so nothing
+    // to disambiguate.
+    private const string PlatformFolderUid = "shophub-platform";
+
     public async Task ProvisionAsync(ShopSite site, string ownerEmail, CancellationToken cancellationToken = default)
     {
         var orgId = await EnsureUsersOrgAsync(cancellationToken);
@@ -46,6 +51,46 @@ public class GrafanaProvisioningService(
         await EnsureSuccessAsync(switchOrg, "switch owner's active Grafana org", cancellationToken);
 
         return $"/grafana-proxy/d/{site.K8sName}?orgId={orgId}";
+    }
+
+    public async Task<string> GetPlatformDashboardPathAsync(string ownerEmail, CancellationToken cancellationToken = default)
+    {
+        // Full ProvisionAsync-equivalent sequence, not just the org-switch GetDashboardPathAsync
+        // does — unlike a shop's dashboard (only ever requested by someone who already went
+        // through ProvisionAsync when creating that shop), this can be the very first Grafana
+        // interaction for a user who has never created a shop at all.
+        var orgId = await EnsureUsersOrgAsync(cancellationToken);
+        await EnsureGlobalUserAsync(ownerEmail, cancellationToken);
+        await EnsureOrgMembershipAsync(orgId, ownerEmail, cancellationToken);
+
+        await EnsurePlatformDashboardProvisionedAsync(cancellationToken);
+
+        var switchOrg = await SendAsync(HttpMethod.Post, $"/api/user/using/{orgId}", body: null, useOrgScopedAuth: false, cancellationToken, impersonateEmail: ownerEmail);
+        await EnsureSuccessAsync(switchOrg, "switch owner's active Grafana org", cancellationToken);
+
+        return $"/grafana-proxy/d/{PlatformFolderUid}?orgId={orgId}";
+    }
+
+    private async Task EnsurePlatformDashboardProvisionedAsync(CancellationToken cancellationToken)
+    {
+        await EnsureFolderAsync(PlatformFolderUid, "ShopHub Platform", cancellationToken);
+
+        var dashboard = PlatformDashboard.Build();
+        var response = await SendAsync(HttpMethod.Post, "/api/dashboards/db", new
+        {
+            dashboard,
+            folderUid = PlatformFolderUid,
+            overwrite = true,
+        }, useOrgScopedAuth: true, cancellationToken);
+        await EnsureSuccessAsync(response, "provision platform dashboard", cancellationToken);
+
+        // Every org-2 Viewer, not one specific user — this replaces the folder's whole ACL each
+        // time, same as SetFolderPermissionsAsync does for a shop's single-user ACL below.
+        var permissions = await SendAsync(HttpMethod.Post, $"/api/folders/{PlatformFolderUid}/permissions", new
+        {
+            items = new[] { new { role = "Viewer", permission = 1 /* View */ } },
+        }, useOrgScopedAuth: true, cancellationToken);
+        await EnsureSuccessAsync(permissions, "set platform folder permissions", cancellationToken);
     }
 
     public async Task DeprovisionAsync(ShopSite site, CancellationToken cancellationToken = default)
