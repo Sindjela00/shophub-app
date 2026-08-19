@@ -85,6 +85,51 @@ public class ShopSitesEndpointTests(ShopHubApiFactory factory)
     }
 
     [Fact]
+    public async Task Create_with_a_valid_wallet_address_returns_201()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var request = NewCreateRequest("Valid Wallet Shop") with { WalletAddress = "0x1234567890ABCDEF1234567890abcdef12345678" };
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Post, "/api/shop-sites", token, request));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("not-a-wallet-address")]
+    [InlineData("0x123")]
+    [InlineData("1234567890abcdef1234567890abcdef12345678")]
+    public async Task Create_with_an_invalid_wallet_address_returns_400_and_does_not_provision(string walletAddress)
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var request = NewCreateRequest("Bad Wallet Shop") with { WalletAddress = walletAddress };
+
+        var response = await _client.SendAsync(AuthedRequest(HttpMethod.Post, "/api/shop-sites", token, request));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var listResponse = await _client.SendAsync(AuthedRequest(HttpMethod.Get, "/api/shop-sites", token));
+        var sites = await listResponse.Content.ReadFromJsonAsync<List<ShopSiteDto>>(TestJson.Options);
+        Assert.DoesNotContain(sites!, s => s.Name == "Bad Wallet Shop");
+    }
+
+    [Fact]
+    public async Task Update_with_an_invalid_wallet_address_returns_400_and_does_not_change_the_site()
+    {
+        var token = await RegisterAndGetTokenAsync();
+        var created = await CreateShopSiteAsync(token);
+
+        var response = await _client.SendAsync(AuthedRequest(
+            HttpMethod.Put, $"/api/shop-sites/{created.Id}", token, new UpdateShopSiteRequest("standard", "not-a-wallet-address")));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var fetched = await (await _client.SendAsync(AuthedRequest(HttpMethod.Get, $"/api/shop-sites/{created.Id}", token)))
+            .Content.ReadFromJsonAsync<ShopSiteDto>(TestJson.Options);
+        Assert.Equal(created.WalletAddress, fetched!.WalletAddress);
+    }
+
+    [Fact]
     public async Task Create_does_not_persist_a_shop_site_when_provisioning_fails()
     {
         var token = await RegisterAndGetTokenAsync();
