@@ -193,11 +193,25 @@ using (var scope = app.Services.CreateScope())
 
 app.UseHttpsRedirection();
 
+// The frontend is bundled into wwwroot by the Docker build (see backend/Dockerfile) — absent
+// in local `dotnet run` without a prior `npm run build`, in which case these just serve nothing
+// and every request falls through to the controllers/404 below, same as before bundling. Placed
+// ahead of the auth middleware so static assets (including the login page's own JS/CSS) are
+// never gated behind a token that doesn't exist yet.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapReverseProxy().RequireAuthorization();
+
+// Client-side routes (e.g. /shop-sites, /login) have nothing on disk to match — hand them the
+// SPA shell so React Router can take over, instead of a bare 404 on refresh/direct navigation.
+// Placed last so it only ever catches requests MapControllers/MapReverseProxy didn't already
+// handle.
+app.MapFallbackToFile("index.html");
 
 app.Run();
 
