@@ -21,3 +21,10 @@ export interface UpdateShopSiteRequest {
   availability: Availability
   walletAddress: string
 }
+
+export interface DiscordStatus {
+  attached: boolean
+  guildId: string | null
+  ready: boolean
+  message: string | null
+}

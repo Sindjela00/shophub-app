@@ -9,11 +9,14 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ShopHub.Api.Data;
 using ShopHub.Api.Models;
+using ShopHub.Api.Observability;
 using ShopHub.Api.Services;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddObservability();
 
 const string DevCorsPolicy = "DevCors";
 builder.Services.AddCors(options =>
@@ -119,6 +122,14 @@ builder.Services.AddScoped<IShopProvisioningService, KubernetesShopProvisioningS
 builder.Services.AddScoped<IShopAdminKeyService, ShopAdminKeyService>();
 builder.Services.AddScoped<IShopSiteUrlService, ShopSiteUrlService>();
 
+builder.Services.Configure<DiscordOptions>(builder.Configuration.GetSection(DiscordOptions.SectionName));
+builder.Services.AddHttpClient<IShopDiscordService, ShopDiscordService>(client =>
+{
+    // Trailing slash matters: combined with ShopDiscordService's relative (no leading slash)
+    // request URIs, this is what keeps "/api/v10" instead of a bare request URI discarding it.
+    client.BaseAddress = new Uri("https://discord.com/api/v10/");
+});
+
 builder.Services.Configure<GrafanaOptions>(builder.Configuration.GetSection(GrafanaOptions.SectionName));
 builder.Services.AddHttpClient<IGrafanaProvisioningService, GrafanaProvisioningService>((sp, client) =>
 {
@@ -175,6 +186,9 @@ builder.Services.AddReverseProxy()
 
 var app = builder.Build();
 
+// First, so every request is counted even if later middleware redirects/short-circuits it.
+app.UseMiddleware<TrafficMetricsMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -198,6 +212,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapReverseProxy().RequireAuthorization();
+app.MapPrometheusScrapingEndpoint();
 
 app.Run();
 

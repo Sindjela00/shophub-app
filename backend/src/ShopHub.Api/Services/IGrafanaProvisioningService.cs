@@ -19,4 +19,12 @@ public interface IGrafanaProvisioningService
     Task<string> GetDashboardPathAsync(ShopSite site, string ownerEmail, CancellationToken cancellationToken = default);
 
     Task DeprovisionAsync(ShopSite site, CancellationToken cancellationToken = default);
+
+    /// <summary>Same idea as <see cref="GetDashboardPathAsync"/>, but for the single shared
+    /// platform dashboard rather than a per-shop one: provisions it (idempotently) if this is
+    /// the first time anyone's asked for it, ensures the given user has org membership (even if
+    /// they've never created a shop), switches their active org, and returns the path. Every
+    /// org-2 Viewer can see this dashboard — there's no per-user folder ACL the way
+    /// <see cref="ProvisionAsync"/> sets up for a shop's own dashboard.</summary>
+    Task<string> GetPlatformDashboardPathAsync(string ownerEmail, CancellationToken cancellationToken = default);
 }

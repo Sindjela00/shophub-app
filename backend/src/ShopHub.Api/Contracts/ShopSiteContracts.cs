@@ -10,6 +10,16 @@ public record AdminKeyDto(string Key);
 
 public record SiteUrlDto(string Url);
 
+public record DiscordInviteDto(string InviteUrl);
+
+public record DiscordStatusDto(bool Attached, string? GuildId, bool Ready, string? Message)
+{
+    public static DiscordStatusDto FromStatus(Services.DiscordStatus status) =>
+        new(status.Attached, status.GuildId, status.Ready, status.Message);
+}
+
+public record AttachDiscordRequest(string GuildId);
+
 public record ShopSiteDto(Guid Id, string Name, string Availability, string WalletAddress, string DatabaseKind, DateTimeOffset CreatedAt)
 {
     public static ShopSiteDto FromEntity(Models.ShopSite site) =>

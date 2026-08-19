@@ -36,14 +36,16 @@ public class KubernetesShopProvisioningServiceTests
     private static StringContent RawJsonContent(string json) => new(json, Encoding.UTF8, "application/json");
 
     [Fact]
-    public async Task ProvisionAsync_creates_shop_wallet_and_discordchannel_with_correct_spec()
+    public async Task ProvisionAsync_creates_shop_and_wallet_with_correct_spec()
     {
         var site = NewSite();
         var (service, handler) = CreateService();
 
         await service.ProvisionAsync(site);
 
-        Assert.Equal(3, handler.Requests.Count);
+        // No discordchannels create here anymore — that CR needs a guildId the owner hasn't
+        // chosen yet at shop-creation time (see IShopDiscordService.AttachAsync instead).
+        Assert.Equal(2, handler.Requests.Count);
         Assert.All(handler.Requests, r => Assert.Equal(HttpMethod.Post, r.Method));
 
         var shopReq = Assert.Single(handler.Requests, r => r.Uri.AbsolutePath.EndsWith("/namespaces/shops/shops"));
@@ -58,10 +60,6 @@ public class KubernetesShopProvisioningServiceTests
         var walletSpec = walletReq.BodyJson!.RootElement.GetProperty("spec");
         Assert.Equal(site.K8sName, walletSpec.GetProperty("shopRef").GetString());
         Assert.Equal(site.WalletAddress, walletSpec.GetProperty("address").GetString());
-
-        var discordReq = Assert.Single(handler.Requests, r => r.Uri.AbsolutePath.EndsWith("/namespaces/shops/discordchannels"));
-        var discordSpec = discordReq.BodyJson!.RootElement.GetProperty("spec");
-        Assert.Equal(site.K8sName, discordSpec.GetProperty("shopRef").GetString());
     }
 
     [Fact]
