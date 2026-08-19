@@ -10,9 +10,6 @@ namespace ShopHub.Api.Tests;
 
 public class ShopDiscordServiceTests
 {
-    private const string SecretName = "shop-operator-discord";
-    private const string SecretKey = "DISCORD_BOT_TOKEN";
-
     private static ShopSite NewSite() => new()
     {
         Id = Guid.NewGuid(),
@@ -25,7 +22,8 @@ public class ShopDiscordServiceTests
 
     private static ShopDiscordService CreateService(
         Func<HttpRequestMessage, HttpResponseMessage> respondK8s,
-        Func<HttpRequestMessage, HttpResponseMessage>? respondDiscord = null)
+        Func<HttpRequestMessage, HttpResponseMessage>? respondDiscord = null,
+        string botToken = "bot-token-123")
     {
         var k8sConfig = new KubernetesClientConfiguration { Host = "https://fake-cluster.test" };
         var k8sClient = new Kubernetes(k8sConfig, new StubHandler(respondK8s));
@@ -34,25 +32,9 @@ public class ShopDiscordServiceTests
         var discordClient = new HttpClient(discordHandler) { BaseAddress = new Uri("https://discord.com/api/v10/") };
 
         var k8sOptions = Options.Create(new KubernetesOptions { Namespace = "shops", InCluster = false });
-        var discordOptions = Options.Create(new DiscordOptions { ClientId = "test-client-id" });
+        var discordOptions = Options.Create(new DiscordOptions { ClientId = "test-client-id", BotToken = botToken });
         return new ShopDiscordService(k8sClient, discordClient, k8sOptions, discordOptions);
     }
-
-    private static HttpResponseMessage SecretResponse(string token) =>
-        new(HttpStatusCode.OK)
-        {
-            Content = new StringContent(
-                $$"""
-                {
-                  "apiVersion": "v1",
-                  "kind": "Secret",
-                  "metadata": { "name": "{{SecretName}}", "namespace": "shops" },
-                  "data": { "{{SecretKey}}": "{{Convert.ToBase64String(Encoding.UTF8.GetBytes(token))}}" }
-                }
-                """,
-                Encoding.UTF8,
-                "application/json"),
-        };
 
     private static HttpResponseMessage JsonResponse(HttpStatusCode status, string body) =>
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
@@ -72,11 +54,7 @@ public class ShopDiscordServiceTests
     public async Task VerifyGuildMembershipAsync_returns_true_when_the_bot_is_a_member()
     {
         var service = CreateService(
-            respondK8s: req =>
-            {
-                Assert.Equal($"/api/v1/namespaces/shops/secrets/{SecretName}", req.RequestUri!.AbsolutePath);
-                return SecretResponse("bot-token-123");
-            },
+            respondK8s: _ => throw new InvalidOperationException("no K8s call expected — the token is a plain config value now"),
             respondDiscord: req =>
             {
                 Assert.Equal("/api/v10/guilds/999", req.RequestUri!.AbsolutePath);
@@ -93,7 +71,7 @@ public class ShopDiscordServiceTests
     public async Task VerifyGuildMembershipAsync_returns_false_when_the_bot_has_not_joined()
     {
         var service = CreateService(
-            respondK8s: _ => SecretResponse("bot-token-123"),
+            respondK8s: _ => throw new InvalidOperationException("no K8s call expected — the token is a plain config value now"),
             respondDiscord: _ => JsonResponse(HttpStatusCode.Forbidden, """{"message":"Missing Access"}"""));
 
         var isMember = await service.VerifyGuildMembershipAsync("999");
@@ -102,12 +80,11 @@ public class ShopDiscordServiceTests
     }
 
     [Fact]
-    public async Task VerifyGuildMembershipAsync_throws_when_the_bot_token_secret_does_not_exist()
+    public async Task VerifyGuildMembershipAsync_throws_when_the_bot_token_is_not_configured()
     {
-        var service = CreateService(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
-        {
-            Content = new StringContent("""{"message":"secrets \"x\" not found"}""", Encoding.UTF8, "application/json"),
-        });
+        var service = CreateService(
+            respondK8s: _ => throw new InvalidOperationException("no K8s call expected — the token is a plain config value now"),
+            botToken: "");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.VerifyGuildMembershipAsync("999"));
     }
