@@ -78,3 +78,7 @@ export function getDiscordStatus(id: string): Promise<DiscordStatus> {
 export function attachDiscord(id: string, guildId: string): Promise<DiscordStatus> {
   return request<DiscordStatus>('POST', `/shop-sites/${id}/discord/attach`, { guildId })
 }
+
+export function getAdminKey(id: string): Promise<{ key: string }> {
+  return request<{ key: string }>('GET', `/shop-sites/${id}/admin-key`)
+}
