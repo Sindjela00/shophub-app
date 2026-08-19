@@ -1,6 +1,5 @@
 # CI pipeline — triggered on every PR against develop/master, and publishes
 # a container image to GHCR on merge to master.
-# TODO: build & test the frontend (npm run build / vitest) once that's in scope.
 name: CI
 on:
   pull_request:
@@ -41,6 +40,23 @@ jobs:
       - name: Integration tests
         run: dotnet test backend/tests/ShopHub.Api.IntegrationTests/ShopHub.Api.IntegrationTests.csproj --no-build --configuration Release
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      # Same build the Docker image's frontend-build stage runs — catches frontend build
+      # breakage (including the tsc -b type-check it includes) at PR time, not just at publish.
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
   publish-image:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: build-and-test
@@ -68,7 +84,10 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: backend
+          # Repo root, not backend/ — the Dockerfile's frontend-build stage needs frontend/ in
+          # the build context too now. The Dockerfile itself stays at backend/Dockerfile.
+          context: .
+          file: backend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
