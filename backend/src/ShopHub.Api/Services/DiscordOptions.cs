@@ -9,11 +9,11 @@ public class DiscordOptions
     /// follows to add the bot to their own server.</summary>
     public string ClientId { get; set; } = "";
 
-    /// <summary>Name of the Secret (in <see cref="KubernetesOptions.Namespace"/>, the same
-    /// namespace shophub-shop-operator's own DiscordChannel controller reads it from) holding
-    /// the bot token — read live via the Kubernetes API rather than injected into this app's own
-    /// env, so there's exactly one place the token is configured.</summary>
-    public string BotTokenSecretName { get; set; } = "shop-operator-discord";
-
-    public string BotTokenSecretKey { get; set; } = "DISCORD_BOT_TOKEN";
+    /// <summary>The Discord bot's token — this app owns the credential (shop-operator's own
+    /// DiscordChannelReconciler reads the same underlying Secret live via the Kubernetes API
+    /// instead of holding a copy, precisely so there's exactly one place it's configured).
+    /// Injected as a plain env var from the shophub chart's own Secret, the same way
+    /// Jwt:SigningKey/Database:ConnectionString already are — no Kubernetes API call needed to
+    /// read this app's own credential.</summary>
+    public string BotToken { get; set; } = "";
 }
