@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using k8s;
 using k8s.Autorest;
@@ -33,7 +32,7 @@ public class ShopDiscordService(
 
     public async Task<bool> VerifyGuildMembershipAsync(string guildId, CancellationToken cancellationToken = default)
     {
-        var botToken = await ReadBotTokenAsync(cancellationToken);
+        var botToken = RequireBotToken();
 
         // No leading slash: HttpClient.BaseAddress ("https://discord.com/api/v10/", trailing
         // slash) only keeps its path when the relative URI is *not* absolute-path-rooted — a
@@ -123,25 +122,13 @@ public class ShopDiscordService(
         return new DiscordStatus(Attached: true, GuildId: guildId, Ready: ready, Message: message);
     }
 
-    private async Task<string> ReadBotTokenAsync(CancellationToken cancellationToken)
+    private string RequireBotToken()
     {
-        V1Secret secret;
-        try
-        {
-            secret = await client.CoreV1.ReadNamespacedSecretAsync(Options.BotTokenSecretName, Namespace, cancellationToken: cancellationToken);
-        }
-        catch (HttpOperationException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+        if (string.IsNullOrEmpty(Options.BotToken))
         {
             throw new InvalidOperationException(
-                $"Discord bot token secret '{Options.BotTokenSecretName}' not found in namespace '{Namespace}'.");
+                "Discord bot token is not configured — set discord.botToken (or discord.existingSecret) in the shophub chart's values.");
         }
-
-        if (secret.Data is null || !secret.Data.TryGetValue(Options.BotTokenSecretKey, out var bytes))
-        {
-            throw new InvalidOperationException(
-                $"Discord bot token secret '{Options.BotTokenSecretName}' is missing the '{Options.BotTokenSecretKey}' key.");
-        }
-
-        return Encoding.UTF8.GetString(bytes);
+        return Options.BotToken;
     }
 }
