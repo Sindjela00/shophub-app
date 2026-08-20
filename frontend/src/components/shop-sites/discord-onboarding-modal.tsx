@@ -9,6 +9,21 @@ import type { DiscordStatus, ShopSite } from '@/types/shop-site'
 const inviteLinkClass =
   'flex items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm font-medium text-neutral-900 transition hover:border-purple-300 hover:bg-purple-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:border-purple-500/50 dark:hover:bg-neutral-800/70'
 
+// Mirrors ShopDiscordService.AttachAsync's channelName (`${site.Name}-alerts`) and the
+// operator's discord.SanitizeChannelName (shophub-shop-operator/internal/discord/client.go),
+// which is what actually turns that raw name into the channel Discord ends up with: lowercase,
+// spaces/invalid characters collapsed to hyphens, capped at Discord's 100-character limit.
+// Kept in sync with both so this preview matches the real channel name, not just a guess.
+const INVALID_CHANNEL_CHARS = /[^a-z0-9_-]+/g
+
+function sanitizeChannelName(name: string): string {
+  let s = name.trim().toLowerCase().replaceAll(' ', '-')
+  s = s.replace(INVALID_CHANNEL_CHARS, '-')
+  s = s.replace(/^-+|-+$/g, '')
+  if (s.length === 0) s = 'shop'
+  return s.slice(0, 100)
+}
+
 function statusLabel(status: DiscordStatus | null): string {
   if (!status) return ''
   if (!status.attached) return 'Not attached yet.'
@@ -80,7 +95,8 @@ export function DiscordOnboardingModal({
           <>
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               Invite the bot to your own Discord server, then paste its Server ID below and verify.
-              Once attached, it creates a <span className="font-mono">#{'{name}'}-alerts</span> channel
+              Once attached, it creates a{' '}
+              <span className="font-mono">#{sanitizeChannelName(`${site.name}-alerts`)}</span> channel
               there and posts a welcome message.
             </p>
 
