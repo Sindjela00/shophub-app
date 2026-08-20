@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +14,7 @@ namespace ShopHub.Api.Controllers;
 [ApiController]
 [Route("api/shop-sites")]
 [Authorize]
-public class ShopSitesController(
+public partial class ShopSitesController(
     ShopHubDbContext db,
     IShopProvisioningService provisioningService,
     IGrafanaProvisioningService grafanaProvisioningService,
@@ -24,6 +25,13 @@ public class ShopSitesController(
 {
     private static readonly HashSet<string> ValidAvailabilities = ["standard", "high"];
     private static readonly HashSet<string> ValidDatabaseKinds = ["standard", "light"];
+
+    // Standard Ethereum address format: 0x followed by 40 hex characters. Checked both here
+    // and client-side (shop-site-form-modal.tsx) so an obviously-malformed address never
+    // reaches the cluster — where it would otherwise create a Wallet CR that permanently
+    // fails with InvalidAddress, invisibly to the user.
+    [GeneratedRegex("^0x[0-9a-fA-F]{40}$")]
+    private static partial Regex WalletAddressPattern();
 
     [HttpPost]
     public async Task<ActionResult<ShopSiteDto>> Create(CreateShopSiteRequest request)
@@ -48,6 +56,11 @@ public class ShopSitesController(
         if (string.IsNullOrWhiteSpace(request.WalletAddress))
         {
             return BadRequest(new ErrorResponse("WalletAddress is required."));
+        }
+
+        if (!WalletAddressPattern().IsMatch(request.WalletAddress.Trim()))
+        {
+            return BadRequest(new ErrorResponse("WalletAddress must be a valid Ethereum address (0x followed by 40 hex characters)."));
         }
 
         var site = new ShopSite
@@ -274,6 +287,11 @@ public class ShopSitesController(
         if (string.IsNullOrWhiteSpace(request.WalletAddress))
         {
             return BadRequest(new ErrorResponse("WalletAddress is required."));
+        }
+
+        if (!WalletAddressPattern().IsMatch(request.WalletAddress.Trim()))
+        {
+            return BadRequest(new ErrorResponse("WalletAddress must be a valid Ethereum address (0x followed by 40 hex characters)."));
         }
 
         var previousAvailability = site.Availability;
