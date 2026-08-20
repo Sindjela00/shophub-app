@@ -19,13 +19,18 @@ interface FieldErrors {
   walletAddress?: string
 }
 
+const WALLET_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/
+
 function validate(values: ShopSiteFormValues, mode: 'create' | 'edit'): FieldErrors {
   const errors: FieldErrors = {}
   if (mode === 'create' && values.name.trim().length === 0) {
     errors.name = 'Name is required.'
   }
-  if (values.walletAddress.trim().length === 0) {
+  const walletAddress = values.walletAddress.trim()
+  if (walletAddress.length === 0) {
     errors.walletAddress = 'Wallet address is required.'
+  } else if (!WALLET_ADDRESS_PATTERN.test(walletAddress)) {
+    errors.walletAddress = 'Wallet address must be a valid Ethereum address (0x followed by 40 hex characters).'
   }
   return errors
 }
